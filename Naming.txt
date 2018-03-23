@@ -1,0 +1,6 @@
+Class Name: CamelCase
+Methods: undersocre sep small cases
+Vars: underescore seperated, smallcase
+CONSTANT: ALL CAPS, underscore sep
+
+

@@ -4,15 +4,15 @@
 #include <Eigen/Dense>
 #include <Eigen/Geometry>
 
-#define NX 128
-#define NY 128
-#define NZ 128
-#define LX 1.0
-#define LY 1.0
-#define LZ 1.0
-#define NUM_TIME_STEPS 10
-#define DT 0.1
-#define H 0.1
+#define NX 64
+#define NY 64
+#define NZ 64
+#define LX 0.03
+#define LY 0.03
+#define LZ 0.03
+#define NUM_TIME_STEPS 100
+#define DT 0.04
+#define H 0.01
 #define PI 3.14
 #define EPSILON 0.01
 
@@ -22,7 +22,29 @@ bool is_zero(double p) {
 	return(p<EPSILON && p>-EPSILON);
 }
 
-void convert_div(fftw_complex *in, grid  points) {
+void print_psi(grid &points) {
+	for (unsigned int i = 0 ; i < points.size() ; i++ ) {
+		for(unsigned int j = 0; j<points[i].size(); j++) {
+			for(unsigned int k = 0; k < points[i][j].size(); k++) {
+				Comp2 psi = points[i][j][k].get_psi();
+				printf("%d %d %d : (%f + i%f, %f + i%f)\n",i,j,k,psi.get_z1().real(),psi.get_z1().imag(),psi.get_z2().real(),psi.get_z2().imag());
+			}
+		}
+	}
+}
+
+void print_rho(grid &points) {
+	for (unsigned int i = 0 ; i < points.size() ; i++ ) {
+		for(unsigned int j = 0; j<points[i].size(); j++) {
+			for(unsigned int k = 0; k < points[i][j].size(); k++) {
+				Comp2 psi = points[i][j][k].get_psi();
+				printf("%d %d %d : %f\n",i,j,k,psi.norm2());
+			}
+		}
+	}
+}
+
+void convert_div(fftw_complex *in, grid  & points) {
 	for (unsigned int i = 0 ; i < points.size() ; i++ ) {
 		for(unsigned int j = 0; j<points[i].size(); j++) {
 			for(unsigned int k = 0; k < points[i][j].size(); k++) {
@@ -33,7 +55,7 @@ void convert_div(fftw_complex *in, grid  points) {
 	}
 }
 
-void convert_psi1(fftw_complex * in, grid points) {
+void convert_psi1(fftw_complex * in, grid & points) {
 	for (unsigned int i = 0 ; i < points.size() ; i++ ) {
 		for(unsigned int j = 0; j<points[i].size(); j++) {
 			for(unsigned int k = 0; k < points[i][j].size(); k++) {
@@ -45,7 +67,7 @@ void convert_psi1(fftw_complex * in, grid points) {
 	}
 }
 
-void convert_psi2(fftw_complex * in, grid points) {
+void convert_psi2(fftw_complex * in, grid & points) {
 	for (unsigned int i = 0 ; i < points.size() ; i++ ) {
 		for(unsigned int j = 0; j<points[i].size(); j++) {
 			for(unsigned int k = 0; k < points[i][j].size(); k++) {
@@ -81,7 +103,7 @@ void reconvert_psi2(fftw_complex * out, grid & points) {
 	}
 }
 
-void modify_div(fftw_complex * out, fftw_complex * in, grid points) {
+void modify_div(fftw_complex * out, fftw_complex * in, grid & points) {
 	for (unsigned int i = 0 ; i < points.size() ; i++ ) {
 		for(unsigned int j = 0; j<points[i].size(); j++) {
 			for(unsigned int k = 0; k < points[i][j].size(); k++) {
@@ -194,6 +216,10 @@ void isf(grid & points) {
 	fftw_plan bp = fftw_plan_dft_3d(NX,NY,NZ,in,out,FFTW_BACKWARD,FFTW_MEASURE);
 
 	for ( unsigned int t = 0; t < NUM_TIME_STEPS ; t++) {
+
+		printf("Time step : %d\n", t);
+		print_rho(points);
+
 		schrodinger(in,out,fp,bp,points);
 		normalize(points);
 		pressure_project(in,out,fp,bp,points);
@@ -251,6 +277,23 @@ void add_filament(grid & points, grid &points1) {
 	}
 }
 
+void resize_grid(grid & points) {
+	points.resize(NX);
+	for(int i=0;i<NX;i++) {
+		points[i].resize(NY);
+		for(int j=0;j<NY;j++) {
+			points[i][j].resize(NZ);
+		}
+	}
+}
+
 int main() {
 	grid points;
+	Eigen::Vector3d center(1.0,1.0,1.0);
+	Eigen::Vector3d normal(1.0,0.0,0.0);
+	double r = 0.5;
+	double t = 0.05;
+	resize_grid(points);
+	initialize_filament(points,center,normal,r,t);
+	isf(points);
 }

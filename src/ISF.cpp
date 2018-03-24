@@ -1,6 +1,8 @@
 #include <fftw3.h>
 #include <vector>
 #include <GridPoint.h>
+#include <Eigen/Dense>
+#include <Eigen/Geometry>
 
 #define NX 128
 #define NY 128
@@ -202,9 +204,53 @@ void isf(grid & points) {
 	fftw_free(out);
 }
 
+void initialize_filament(grid & points, Eigen::Vector3d center, Eigen::Vector3d normal, double r, double t) {
+for (unsigned int i = 0 ; i < points.size() ; i++ ) {
+		for(unsigned int j = 0; j<points[i].size(); j++) {
+			for(unsigned int k = 0; k < points[i][j].size(); k++) {
+				Eigen::Vector3d p(i*LX,j*LY,k*LZ);
+				double d = (p-center).dot(normal.normalized());
+				double theta = 0.0;
+				if(d>-t/2.0 && d<t/2.0 && (p-center).squaredNorm() - pow(d,2) < pow(r,2)) {
+					theta = PI * (1.0 + 2.0*d/t);
+				}
+				Comp2 psi = points[i][j][k].get_psi();
+				psi.set_z1(Complex(cos(theta),sin(theta)));
+				psi.set_z2(Complex(EPSILON,0.0));
+				points[i][j][k].set_psi(psi);
+			}
+		}
+	}
+
+	fftw_complex * in = (fftw_complex *) fftw_malloc(sizeof(fftw_complex) * NX * NY * NZ);
+	fftw_complex * out = (fftw_complex *) fftw_malloc(sizeof(fftw_complex) * NX * NY * NZ);
+	fftw_plan fp = fftw_plan_dft_3d(NX,NY,NZ,in,out,FFTW_FORWARD,FFTW_MEASURE);
+	fftw_plan bp = fftw_plan_dft_3d(NX,NY,NZ,in,out,FFTW_BACKWARD,FFTW_MEASURE);
+
+	normalize(points);
+	pressure_project(in,out,fp,bp,points);
+	
+	fftw_destroy_plan(fp);
+	fftw_destroy_plan(bp);
+	fftw_free(in);
+	fftw_free(out);
+}
+
+//add points1 filament to points filament
+void add_filament(grid & points, grid &points1) {
+	for (unsigned int i = 0 ; i < points.size() ; i++ ) {
+		for(unsigned int j = 0; j<points[i].size(); j++) {
+			for(unsigned int k = 0; k < points[i][j].size(); k++) {
+				Comp2 psi = points[i][j][k].get_psi();
+				Comp2 psi1 = points1[i][j][k].get_psi();
+				psi.set_z1(psi.get_z1() * psi1.get_z1());
+				psi.set_z2(psi.get_z2() * psi1.get_z2());
+				points[i][j][k].set_psi(psi);
+			}
+		}
+	}
+}
+
 int main() {
 	grid points;
-
-
-
 }

@@ -14,6 +14,8 @@ class GridPoint {
 
 		double get_pressure() const;
 
+		double get_div() const;
+
 		void normalize();	
 
 		void update_psi();
@@ -22,7 +24,7 @@ class GridPoint {
 
 		void update_div(double div);
 
-		Comp2 get_psi();
-		void set_psi(Comp2);
+		Comp2 get_psi() const;
+		void set_psi(Comp2) ;
 
 };

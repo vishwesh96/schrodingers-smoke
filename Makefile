@@ -29,9 +29,9 @@ EIGEN_INCLUDE=/usr/local/include/eigen3
 FILESYSTEM_INCLUDE=$(EXTDIR)/filesystem
 
 # Compiler and Linker flags
-LDFLAGS=-L/usr/local/lib -fopenmp
+LDFLAGS=-L/usr/local/lib -fopenmp -lfftw3
 
-CPPFLAGS=-I$(EIGEN_INCLUDE) -I$(FILESYSTEM_INCLUDE) -I$(INCDIR) -fopenmp 
+CPPFLAGS=-I$(EIGEN_INCLUDE) -I$(FILESYSTEM_INCLUDE) -I$(INCDIR)
 CPPFLAGS+=-O3 -Wall -std=c++11 
 
 ######################################
@@ -62,7 +62,7 @@ all: $(TARGET)
 
 $(TARGET): $(OBJS)
 	@$(PRINTF) "$(MESG_COLOR)Building executable:$(NO_COLOR) $(FILE_COLOR) %16s$(NO_COLOR)" "$(notdir $@)"
-	@$(CC) -o $@ $(LDFLAGS) $(OBJS) $(LIBS) 2> temp.log || touch temp.err
+	@$(CC) -o $@  $(OBJS) $(LIBS) $(LDFLAGS) 2> temp.log || touch temp.err
 	@if test -e temp.err; \
 	then $(PRINTF) $(ERR_FMT) $(ERR_STRING) && $(CAT) temp.log; \
 	elif test -s temp.log; \

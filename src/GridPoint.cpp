@@ -9,11 +9,15 @@ double GridPoint::get_pressure() const {
 	return q;
 }
 
-double GridPoint::get_psi() const {
+double GridPoint::get_div() const {
+	return div;
+}
+
+Comp2 GridPoint::get_psi() const {
 	return psi;
 }
 
-void GridPoint::set_psi(Comp2 psi) const {
+void GridPoint::set_psi(Comp2 psi)  {
 	this->psi = psi;
 }
 

@@ -33,11 +33,11 @@ class Comp2 {
 		}
 
 		double norm() const {
-			return sqrt( (z1 * std::conj(z1) + z2 * std::conj(z2)).real() );
+			return sqrt( pow(std::abs(z1),2) + pow(std::abs(z2), 2) );
 		}
 
 		double norm2() const {
-			return ( (z1 * std::conj(z1) + z2 * std::conj(z2)).real() );	
+			return ( pow(std::abs(z1),2) + pow(std::abs(z2), 2) );	
 		}
 
 

@@ -10,7 +10,7 @@
 #define LX 0.03
 #define LY 0.03
 #define LZ 0.03
-#define NUM_TIME_STEPS 100
+#define NUM_TIME_STEPS 0
 #define DT 0.04
 #define H 0.01
 #define PI 3.14
@@ -38,7 +38,7 @@ void print_rho(grid &points) {
 		for(unsigned int j = 0; j<points[i].size(); j++) {
 			for(unsigned int k = 0; k < points[i][j].size(); k++) {
 				Comp2 psi = points[i][j][k].get_psi();
-				printf("%d %d %d : %f\n",i,j,k,psi.norm2());
+				printf("%d %d %d : %f\n",i,j,k,psi.norm2() );
 			}
 		}
 	}
@@ -107,7 +107,7 @@ void modify_div(fftw_complex * out, fftw_complex * in, grid & points) {
 	for (unsigned int i = 0 ; i < points.size() ; i++ ) {
 		for(unsigned int j = 0; j<points[i].size(); j++) {
 			for(unsigned int k = 0; k < points[i][j].size(); k++) {
-				double lambda = (-4.0)*(pow(sin(PI*i/NX),2)*(1.0/pow(LX,2)) + pow(sin(PI*j/NY),2)*(1.0/pow(LY,2)) + pow(sin(PI*k/NZ),2)*(1.0/pow(LZ,2)));
+				double lambda = (-4.0)*( pow(sin(PI*i/NX),2)/(LX*LX) + pow(sin(PI*j/NY),2)/(LY*LY) + pow(sin(PI*k/NZ),2)/(LZ*LZ) );
 				if(!is_zero(lambda)){
 					in[k + NZ *(j + NY * i)][0] = out[k + NZ *(j + NY * i)][0]/lambda;
 					in[k + NZ *(j + NY * i)][1] = out[k + NZ *(j + NY * i)][1]/lambda;
@@ -126,9 +126,11 @@ void reconvert_pressure(fftw_complex * out, grid & points) {
 			for(unsigned int k = 0; k < points[i][j].size(); k++) {
 				Comp2 psi = points[i][j][k].get_psi();
 				double theta = out[k + NZ *(j + NY * i)][0];
+				Complex real_factor(exp(out[k + NZ *(j + NY * i)][1]),0.0);
+				printf("%f\n",out[k + NZ *(j + NY * i)][1]);
 				Complex factor(cos(theta),-sin(theta));
-				psi.set_z1(psi.get_z1() * factor);
-				psi.set_z2(psi.get_z2() * factor);
+				psi.set_z1(psi.get_z1() * factor * real_factor);
+				psi.set_z2(psi.get_z2() * factor * real_factor);
 				points[i][j][k].set_psi(psi);
 			}
 		}
@@ -139,7 +141,7 @@ void mult_exp(grid & points) {
 for (unsigned int i = 0 ; i < points.size() ; i++ ) {
 		for(unsigned int j = 0; j<points[i].size(); j++) {
 			for(unsigned int k = 0; k < points[i][j].size(); k++) {
-				double lambda = -pow((2*PI),2)*( pow((i/LX*NX),2) + pow((j/LY*NY),2) + pow((k/LZ*NZ),2));
+				double lambda = -pow((2*PI),2)*( pow((i/(LX*NX)),2) + pow((j/(LY*NY)),2) + pow((k/(LZ*NZ)),2));
 				double theta = 0.5 * lambda * DT * H;
 				Complex factor(cos(theta),sin(theta));
 				Comp2 psi = points[i][j][k].get_psi();
@@ -168,7 +170,9 @@ void schrodinger(fftw_complex * in, fftw_complex * out, fftw_plan fp, fftw_plan 
 	convert_psi2(in,points);
 	fftw_execute(fp);
 	reconvert_psi2(out,points);
+
 	mult_exp(points);
+	
 	convert_psi1(in,points);
 	fftw_execute(bp);
 	reconvert_psi1(out,points);
@@ -181,7 +185,7 @@ void pressure_project(fftw_complex * in, fftw_complex * out, fftw_plan fp, fftw_
 	
 	// Set up divergence for each grid point
 	for (unsigned int i = 0 ; i < points.size() ; i++ ) {
-		for(unsigned int j = 0; j<points[i].size(); j++) {
+		for(unsigned int j = 0; j < points[i].size(); j++) {
 			for(unsigned int k = 0; k < points[i][j].size(); k++) {
 				double V =  8 * LX * LY * LZ;
 				double nxp = std::arg(points[i][j][k].get_psi().inner_product(points[(i+1)%NX][j][k].get_psi())); 
@@ -191,7 +195,7 @@ void pressure_project(fftw_complex * in, fftw_complex * out, fftw_plan fp, fftw_
 				double nzp = std::arg(points[i][j][k].get_psi().inner_product(points[i][j][(k+1)%NZ].get_psi()));
 				double nzn = std::arg(points[i][j][k].get_psi().inner_product(points[i][j][(NZ + k-1)%NZ].get_psi()));
 
-				double sum = (nxp+nxn)*4.0*LY*LZ/LX + (nyp+nyn)*4.0*LZ*LX/LY + (nzp+nzn)*4.0*LX*LY/LZ;
+				double sum = ((nxp+nxn)*4.0*LY*LZ)/LX + ((nyp+nyn)*4.0*LZ*LX)/LY + ((nzp+nzn)*4.0*LX*LY)/LZ;
 
 				points[i][j][k].update_div(sum/V);
 			} 
@@ -216,10 +220,6 @@ void isf(grid & points) {
 	fftw_plan bp = fftw_plan_dft_3d(NX,NY,NZ,in,out,FFTW_BACKWARD,FFTW_MEASURE);
 
 	for ( unsigned int t = 0; t < NUM_TIME_STEPS ; t++) {
-
-		printf("Time step : %d\n", t);
-		print_rho(points);
-
 		schrodinger(in,out,fp,bp,points);
 		normalize(points);
 		pressure_project(in,out,fp,bp,points);
@@ -237,8 +237,15 @@ for (unsigned int i = 0 ; i < points.size() ; i++ ) {
 				Eigen::Vector3d p(i*LX,j*LY,k*LZ);
 				double d = (p-center).dot(normal.normalized());
 				double theta = 0.0;
-				if(d>-t/2.0 && d<t/2.0 && (p-center).squaredNorm() - pow(d,2) < pow(r,2)) {
+				/*if(d>-t/2.0 && d<t/2.0 && (p-center).squaredNorm() - pow(d,2) < pow(r,2)) {
 					theta = PI * (1.0 + 2.0*d/t);
+				}*/
+				if ( (p-center).squaredNorm() - d*d < r*r ) {
+					if ( d > 0 && d <= t/2.0) {
+						theta = -PI * (2.0*d/t - 1.0);	
+					} else if (d <= 0 && d>= -t/2.0){
+						theta = -PI * (2.0*d/t + 1.0);
+					}
 				}
 				Comp2 psi = points[i][j][k].get_psi();
 				psi.set_z1(Complex(cos(theta),sin(theta)));
@@ -255,7 +262,6 @@ for (unsigned int i = 0 ; i < points.size() ; i++ ) {
 
 	normalize(points);
 	pressure_project(in,out,fp,bp,points);
-	
 	fftw_destroy_plan(fp);
 	fftw_destroy_plan(bp);
 	fftw_free(in);
@@ -296,4 +302,5 @@ int main() {
 	resize_grid(points);
 	initialize_filament(points,center,normal,r,t);
 	isf(points);
+	// print_rho(points);
 }

@@ -29,7 +29,7 @@ class Comp2 {
 		}
 
 		Complex inner_product(Comp2 z) const {
-			return z1*std::conj((z.get_z1())) + z2*std::conj(z.get_z2()) ;
+			return std::conj(z1)*(z.get_z1()) + std::conj(z2)*(z.get_z2()) ;
 		}
 
 		double norm() const {

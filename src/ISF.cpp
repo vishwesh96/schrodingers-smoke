@@ -3,17 +3,17 @@
 #include <GridPoint.h>
 #include <Eigen/Dense>
 #include <Eigen/Geometry>
+#include <math.h>
 
-#define NX 64
+#define NX 128
 #define NY 64
 #define NZ 64
-#define LX 0.03
-#define LY 0.03
-#define LZ 0.03
+#define LX 0.078125
+#define LY 0.078125
+#define LZ 0.078125
 #define NUM_TIME_STEPS 0
-#define DT 0.04
-#define H 0.01
-#define PI 3.14
+#define DT 0.04166666667
+#define H 0.1
 #define EPSILON 0.01
 
 typedef std::vector< std::vector < std::vector< GridPoint> > > grid;
@@ -38,7 +38,8 @@ void print_rho(grid &points) {
 		for(unsigned int j = 0; j<points[i].size(); j++) {
 			for(unsigned int k = 0; k < points[i][j].size(); k++) {
 				Comp2 psi = points[i][j][k].get_psi();
-				printf("%d %d %d : %f\n",i,j,k,psi.norm2() );
+				// printf("%d %d %d : %f +i%f\n",i,j,k,psi.get_z1().real(),psi.get_z1().imag());
+				printf("%d %d %d : %f\n",i,j,k,points[i][j][k].get_div());
 			}
 		}
 	}
@@ -107,7 +108,7 @@ void modify_div(fftw_complex * out, fftw_complex * in, grid & points) {
 	for (unsigned int i = 0 ; i < points.size() ; i++ ) {
 		for(unsigned int j = 0; j<points[i].size(); j++) {
 			for(unsigned int k = 0; k < points[i][j].size(); k++) {
-				double lambda = (-4.0)*( pow(sin(PI*i/NX),2)/(LX*LX) + pow(sin(PI*j/NY),2)/(LY*LY) + pow(sin(PI*k/NZ),2)/(LZ*LZ) );
+				double lambda = (-4.0)*( pow(sin(M_PI*i/NX),2)/(LX*LX) + pow(sin(M_PI*j/NY),2)/(LY*LY) + pow(sin(M_PI*k/NZ),2)/(LZ*LZ) );
 				if(!is_zero(lambda)){
 					in[k + NZ *(j + NY * i)][0] = out[k + NZ *(j + NY * i)][0]/lambda;
 					in[k + NZ *(j + NY * i)][1] = out[k + NZ *(j + NY * i)][1]/lambda;
@@ -127,7 +128,6 @@ void reconvert_pressure(fftw_complex * out, grid & points) {
 				Comp2 psi = points[i][j][k].get_psi();
 				double theta = out[k + NZ *(j + NY * i)][0];
 				Complex real_factor(exp(out[k + NZ *(j + NY * i)][1]),0.0);
-				printf("%f\n",out[k + NZ *(j + NY * i)][1]);
 				Complex factor(cos(theta),-sin(theta));
 				psi.set_z1(psi.get_z1() * factor * real_factor);
 				psi.set_z2(psi.get_z2() * factor * real_factor);
@@ -141,7 +141,7 @@ void mult_exp(grid & points) {
 for (unsigned int i = 0 ; i < points.size() ; i++ ) {
 		for(unsigned int j = 0; j<points[i].size(); j++) {
 			for(unsigned int k = 0; k < points[i][j].size(); k++) {
-				double lambda = -pow((2*PI),2)*( pow((i/(LX*NX)),2) + pow((j/(LY*NY)),2) + pow((k/(LZ*NZ)),2));
+				double lambda = -pow((2*M_PI),2)*( pow((i/(LX*NX)),2) + pow((j/(LY*NY)),2) + pow((k/(LZ*NZ)),2));
 				double theta = 0.5 * lambda * DT * H;
 				Complex factor(cos(theta),sin(theta));
 				Comp2 psi = points[i][j][k].get_psi();
@@ -187,7 +187,6 @@ void pressure_project(fftw_complex * in, fftw_complex * out, fftw_plan fp, fftw_
 	for (unsigned int i = 0 ; i < points.size() ; i++ ) {
 		for(unsigned int j = 0; j < points[i].size(); j++) {
 			for(unsigned int k = 0; k < points[i][j].size(); k++) {
-				double V =  8 * LX * LY * LZ;
 				double nxp = std::arg(points[i][j][k].get_psi().inner_product(points[(i+1)%NX][j][k].get_psi())); 
 				double nxn = std::arg(points[i][j][k].get_psi().inner_product(points[(NX + i-1)%NX][j][k].get_psi()));
 				double nyp = std::arg(points[i][j][k].get_psi().inner_product(points[i][(j+1)%NY][k].get_psi()));
@@ -195,9 +194,8 @@ void pressure_project(fftw_complex * in, fftw_complex * out, fftw_plan fp, fftw_
 				double nzp = std::arg(points[i][j][k].get_psi().inner_product(points[i][j][(k+1)%NZ].get_psi()));
 				double nzn = std::arg(points[i][j][k].get_psi().inner_product(points[i][j][(NZ + k-1)%NZ].get_psi()));
 
-				double sum = ((nxp+nxn)*4.0*LY*LZ)/LX + ((nyp+nyn)*4.0*LZ*LX)/LY + ((nzp+nzn)*4.0*LX*LY)/LZ;
-
-				points[i][j][k].update_div(sum/V);
+				double sum = (nxp+nxn)/(LX*LX) + (nyp+nyn)/(LY*LY) + (nzp+nzn)/(LZ*LZ);
+				points[i][j][k].update_div(sum);
 			} 
 		}
 	}
@@ -238,13 +236,13 @@ for (unsigned int i = 0 ; i < points.size() ; i++ ) {
 				double d = (p-center).dot(normal.normalized());
 				double theta = 0.0;
 				/*if(d>-t/2.0 && d<t/2.0 && (p-center).squaredNorm() - pow(d,2) < pow(r,2)) {
-					theta = PI * (1.0 + 2.0*d/t);
+					theta = M_PI * (1.0 + 2.0*d/t);
 				}*/
 				if ( (p-center).squaredNorm() - d*d < r*r ) {
 					if ( d > 0 && d <= t/2.0) {
-						theta = -PI * (2.0*d/t - 1.0);	
+						theta = -M_PI * (2.0*d/t - 1.0);	
 					} else if (d <= 0 && d>= -t/2.0){
-						theta = -PI * (2.0*d/t + 1.0);
+						theta = -M_PI * (2.0*d/t + 1.0);
 					}
 				}
 				Comp2 psi = points[i][j][k].get_psi();
@@ -255,13 +253,16 @@ for (unsigned int i = 0 ; i < points.size() ; i++ ) {
 		}
 	}
 
+	// print_psi(points);
 	fftw_complex * in = (fftw_complex *) fftw_malloc(sizeof(fftw_complex) * NX * NY * NZ);
 	fftw_complex * out = (fftw_complex *) fftw_malloc(sizeof(fftw_complex) * NX * NY * NZ);
 	fftw_plan fp = fftw_plan_dft_3d(NX,NY,NZ,in,out,FFTW_FORWARD,FFTW_MEASURE);
 	fftw_plan bp = fftw_plan_dft_3d(NX,NY,NZ,in,out,FFTW_BACKWARD,FFTW_MEASURE);
-
+	
+	
 	normalize(points);
 	pressure_project(in,out,fp,bp,points);
+	print_psi(points);
 	fftw_destroy_plan(fp);
 	fftw_destroy_plan(bp);
 	fftw_free(in);
@@ -295,12 +296,11 @@ void resize_grid(grid & points) {
 
 int main() {
 	grid points;
-	Eigen::Vector3d center(1.0,1.0,1.0);
-	Eigen::Vector3d normal(1.0,0.0,0.0);
-	double r = 0.5;
-	double t = 0.05;
+	Eigen::Vector3d center(5.0,2.5,2.5);
+	Eigen::Vector3d normal(-1.0,0.0,0.0);
+	double r = 1.5;
+	double t = 5*LX;
 	resize_grid(points);
 	initialize_filament(points,center,normal,r,t);
 	isf(points);
-	// print_rho(points);
 }

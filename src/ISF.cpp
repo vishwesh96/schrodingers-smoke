@@ -11,8 +11,8 @@
 #define LX 0.078125
 #define LY 0.078125
 #define LZ 0.078125
-#define NUM_TIME_STEPS 0
-#define DT 0.04166666667
+#define NUM_TIME_STEPS 20
+#define DT 1.0/24
 #define H 0.1
 #define EPSILON 0.01
 
@@ -22,12 +22,20 @@ bool is_zero(double p) {
 	return(p<EPSILON && p>-EPSILON);
 }
 
+void scale_ifft(fftw_complex * out) {
+	double scale = NX*NY*NZ;
+	for (int i = 0;i< NX*NY*NZ; i++){
+		out[i][0] /= scale;
+		out[i][1] /= scale;
+	}
+}
+
 void print_psi(grid &points) {
 	for (unsigned int i = 0 ; i < points.size() ; i++ ) {
 		for(unsigned int j = 0; j<points[i].size(); j++) {
 			for(unsigned int k = 0; k < points[i][j].size(); k++) {
 				Comp2 psi = points[i][j][k].get_psi();
-				printf("%d %d %d : (%f + i%f, %f + i%f)\n",i,j,k,psi.get_z1().real(),psi.get_z1().imag(),psi.get_z2().real(),psi.get_z2().imag());
+				printf("%f\n",psi.get_z1().real());
 			}
 		}
 	}
@@ -109,6 +117,7 @@ void modify_div(fftw_complex * out, fftw_complex * in, grid & points) {
 		for(unsigned int j = 0; j<points[i].size(); j++) {
 			for(unsigned int k = 0; k < points[i][j].size(); k++) {
 				double lambda = (-4.0)*( pow(sin(M_PI*i/NX),2)/(LX*LX) + pow(sin(M_PI*j/NY),2)/(LY*LY) + pow(sin(M_PI*k/NZ),2)/(LZ*LZ) );
+			
 				if(!is_zero(lambda)){
 					in[k + NZ *(j + NY * i)][0] = out[k + NZ *(j + NY * i)][0]/lambda;
 					in[k + NZ *(j + NY * i)][1] = out[k + NZ *(j + NY * i)][1]/lambda;
@@ -141,7 +150,7 @@ void mult_exp(grid & points) {
 for (unsigned int i = 0 ; i < points.size() ; i++ ) {
 		for(unsigned int j = 0; j<points[i].size(); j++) {
 			for(unsigned int k = 0; k < points[i][j].size(); k++) {
-				double lambda = -pow((2*M_PI),2)*( pow((i/(LX*NX)),2) + pow((j/(LY*NY)),2) + pow((k/(LZ*NZ)),2));
+				double lambda = -4.0*M_PI*M_PI*( pow( ((i-64.0)/(10.0)),2) + pow( ((j-32.0)/(5.0)),2) + pow(((k-32.0)/(5.0)),2) );
 				double theta = 0.5 * lambda * DT * H;
 				Complex factor(cos(theta),sin(theta));
 				Comp2 psi = points[i][j][k].get_psi();
@@ -172,12 +181,13 @@ void schrodinger(fftw_complex * in, fftw_complex * out, fftw_plan fp, fftw_plan 
 	reconvert_psi2(out,points);
 
 	mult_exp(points);
-	
 	convert_psi1(in,points);
 	fftw_execute(bp);
+	scale_ifft(out);
 	reconvert_psi1(out,points);
 	convert_psi2(in,points);
 	fftw_execute(bp);
+	scale_ifft(out);
 	reconvert_psi2(out,points);
 }
 
@@ -200,15 +210,15 @@ void pressure_project(fftw_complex * in, fftw_complex * out, fftw_plan fp, fftw_
 		}
 	}
 
+	
 	// FFT of div
 	convert_div(in, points); //can use real dft for speedup
 	fftw_execute(fp);
 	modify_div(out,in,points);
 	fftw_execute(bp);
+	scale_ifft(out);
 	reconvert_pressure(out,points);
 }
-
-
 
 void isf(grid & points) {
 
@@ -226,6 +236,7 @@ void isf(grid & points) {
 	fftw_destroy_plan(bp);
 	fftw_free(in);
 	fftw_free(out);
+
 }
 
 void initialize_filament(grid & points, Eigen::Vector3d center, Eigen::Vector3d normal, double r, double t) {
@@ -253,7 +264,6 @@ for (unsigned int i = 0 ; i < points.size() ; i++ ) {
 		}
 	}
 
-	// print_psi(points);
 	fftw_complex * in = (fftw_complex *) fftw_malloc(sizeof(fftw_complex) * NX * NY * NZ);
 	fftw_complex * out = (fftw_complex *) fftw_malloc(sizeof(fftw_complex) * NX * NY * NZ);
 	fftw_plan fp = fftw_plan_dft_3d(NX,NY,NZ,in,out,FFTW_FORWARD,FFTW_MEASURE);
@@ -262,7 +272,6 @@ for (unsigned int i = 0 ; i < points.size() ; i++ ) {
 	
 	normalize(points);
 	pressure_project(in,out,fp,bp,points);
-	print_psi(points);
 	fftw_destroy_plan(fp);
 	fftw_destroy_plan(bp);
 	fftw_free(in);
@@ -303,4 +312,5 @@ int main() {
 	resize_grid(points);
 	initialize_filament(points,center,normal,r,t);
 	isf(points);
+	print_psi(points);
 }

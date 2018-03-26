@@ -29,7 +29,7 @@ EIGEN_INCLUDE=/usr/local/include/eigen3
 FILESYSTEM_INCLUDE=$(EXTDIR)/filesystem
 
 # Compiler and Linker flags
-LDFLAGS=-L/usr/local/lib -fopenmp -lfftw3
+LDFLAGS=-L/usr/local/lib -fopenmp -lfftw3 -lm
 
 CPPFLAGS=-I$(EIGEN_INCLUDE) -I$(FILESYSTEM_INCLUDE) -I$(INCDIR)
 CPPFLAGS+=-O3 -Wall -std=c++11 

@@ -30,8 +30,8 @@ void print(grid &points) {
 	for (unsigned int i = 0 ; i < points.size() ; i++ ) {
 		for(unsigned int j = 0; j<points[i].size(); j++) {
 			for(unsigned int k = 0; k < points[i][j].size(); k++) {
-				Comp2 psi = points[i][j][k].get_psi();
-				printf("%d %d %d : %f\n",i,j,k,points[i][j][k].get_div());
+				// Comp2 psi = points[i][j][k].get_psi();
+				printf("%d %d %d : %f\n",i,j,k,points[i][j][k].get_density());
 			}
 		}
 	}
@@ -352,7 +352,17 @@ for (unsigned int i = 0 ; i < points.size() ; i++ ) {
 }
 
 void initialize_density(grid & points) {
-
+for (unsigned int i = 0 ; i < points.size() ; i++ ) {
+		for(unsigned int j = 0; j<points[i].size(); j++) {
+			for(unsigned int k = 0; k < points[i][j].size(); k++) {
+				Eigen::Vector3d vorticity;
+				vorticity(0) = (points[i][j][k].get_v()(2) - points[i][(j-1+NY)%NY][k].get_v()(2))/LY - (points[i][j][k].get_v()(1) - points[i][j][(k-1+NZ)%NZ].get_v()(1))/LZ;
+				vorticity(1) = (points[i][j][k].get_v()(0) - points[i][j][(k-1+NZ)%NZ].get_v()(0))/LZ - (points[i][j][k].get_v()(2) - points[(i-1+NX)%NX][j][k].get_v()(2))/LX;
+				vorticity(2) = (points[i][j][k].get_v()(1) - points[(i-1+NX)%NX][j][k].get_v()(1))/LX - (points[i][j][k].get_v()(0) - points[i][(j-1+NY)%NY][k].get_v()(0))/LY;
+				points[i][j][k].set_density(vorticity.norm());
+			}
+		}
+	}
 }
 
 //add points1 filament to points filament
@@ -388,6 +398,8 @@ int main() {
 	double t = 5*LX;
 	resize_grid(points);
 	initialize_filament(points,center,normal,r,t);
+	update_velocity(points);
 	initialize_density(points);
+	print(points);
 	isf(points);
 }

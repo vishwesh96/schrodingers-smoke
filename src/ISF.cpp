@@ -190,15 +190,15 @@ double interpolate_density(grid & points,Eigen::Vector3d y){
 	double z1 = n[0]*LX;
 	double z2 = n[1]*LY;
 	double z3 = n[2]*LZ;
-	double z4 = ((n[0]+1)%NX)*LX;
-	double z5 = ((n[1]+1)%NY)*LY;
-	double z6 = ((n[2]+1)%NZ)*LZ;
+	double z4 = (n[0]+1)*LX;
+	double z5 = (n[1]+1)*LY;
+	double z6 = (n[2]+1)*LZ;
 
 	double y0 = y(0); 
 	double y1 = y(1); 
 	double y2 = y(2);
 
-	double density = ( (z6-y2) * (d1*(z4-y0)*(z5-y1) + d2*(z1-y0)*(z5-y1) + d3*(z1-y0)*(z2-y1) + d4*(z4-y0)*(z2-y1)) + (z3-y2)*(d5*(z4-y0)*(z5-y1) + d6*(z1-y0)*(z5-y1) + d7*(z1-y0)*(z2-y1) + d8*(z4-y0)*(z2-y1)) )/(LX*LY*LZ);
+	double density = ( (z6-y2) * (d1*(z4-y0)*(z5-y1) + d2*(y0-z1)*(z5-y1) + d3*(y0-z1)*(y1-z2) + d4*(z4-y0)*(y1-z2)) + (y2-z3)*(d5*(z4-y0)*(z5-y1) + d6*(y0-z1)*(z5-y1) + d7*(y0-z1)*(y1-z2) + d8*(z4-y0)*(y1-z2)) )/(LX*LY*LZ);
 	return density;
 }
 

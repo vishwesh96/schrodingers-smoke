@@ -1,5 +1,6 @@
 #include <complex>
 #include <math.h>
+#include <Eigen/Geometry>
 
 typedef std::complex<double> Complex;
 
@@ -31,14 +32,15 @@ class Comp2 {
 		Complex inner_product(Comp2 z) const {
 			return std::conj(z1)*(z.get_z1()) + std::conj(z2)*(z.get_z2()) ;
 		}
+		
+		double norm2() const {
+			return std::norm(z1) + std::norm(z2);	
+		}
 
 		double norm() const {
-			return sqrt( pow(std::abs(z1),2) + pow(std::abs(z2), 2) );
+			return sqrt(norm2());
 		}
 
-		double norm2() const {
-			return ( pow(std::abs(z1),2) + pow(std::abs(z2), 2) );	
-		}
 
 
 };

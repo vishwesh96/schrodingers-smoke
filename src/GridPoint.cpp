@@ -1,36 +1,44 @@
 #include <complex>
 #include <GridPoint.h>
 
+Comp2 GridPoint::get_psi() const {
+	return this->psi;
+}
+
 double GridPoint::get_density() const {
-	return psi.norm2();
+	return this->rho;
 }
 
 double GridPoint::get_pressure() const {
-	return q;
+	return this->q;
 }
 
 double GridPoint::get_div() const {
-	return div;
+	return this->div;
 }
 
-Comp2 GridPoint::get_psi() const {
-	return psi;
+Eigen::Vector3d GridPoint::get_v() const {
+	return this->v;
 }
 
 void GridPoint::set_psi(Comp2 psi)  {
 	this->psi = psi;
 }
 
-void GridPoint::update_psi() {
-
+void GridPoint::set_density(double rho) {
+	this->rho = rho;
 }
 
-void GridPoint::update_pressure() {
-
+void GridPoint::set_pressure(double q) {
+	this->q = q;
 }
 
-void GridPoint::update_div(double div) {
+void GridPoint::set_div(double div) {
 	this->div = div;
+}
+
+void GridPoint::set_v(Eigen::Vector3d v) {
+	this->v = v;
 }
 
 void GridPoint::normalize() {

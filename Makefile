@@ -93,6 +93,7 @@ doc:
 clean:
 	@$(ECHO) -n "Cleaning up..."
 	@$(RM) -rf *~ $(OBJS) $(DEPS) $(SRCDIR)/*~
+	@$(RM) out Smoke
 	@$(ECHO) "Done"
 
 distclean: clean

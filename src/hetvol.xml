@@ -1,0 +1,20 @@
+<?xml version='1.0' encoding='utf-8'?>
+
+<scene version="0.4.0">
+	<integrator type="volpath_simple">
+		<integer name="maxDepth" value="8"/>
+	</integrator>
+
+	<medium type="heterogeneous" id="smoke">
+		<string name="method" value="woodcock"/>
+
+		<volume name="density" type="gridvolume">
+			<string name="filename" value="smoke.vol"/>
+		</volume>
+
+		<volume name="albedo" type="constvolume">
+			<spectrum name="value" value="0.9"/>
+		</volume>
+		<float name="scale" value="100"/>
+	</medium>
+</scene>

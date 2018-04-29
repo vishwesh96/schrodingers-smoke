@@ -1,5 +1,9 @@
 #include <fftw3.h>
 #include <GridPoint.h>
+#include <fstream>
+#include <sstream>
+#include <string>
+
 
 #define NX 128
 #define NY 64
@@ -390,6 +394,54 @@ void resize_grid(grid & points) {
 	}
 }
 
+
+
+void density_to_vol(grid & points) {
+	int num_channels = 1;
+	int nx = NX;
+	int ny = NY;
+	int nz = NZ;
+	int xmin = 0;
+	int ymin = 0;
+	int zmin = 0;
+	int xmax = LX * NX;
+	int ymax = LY * NY;
+	int zmax = LZ * NZ;
+	int file_format = 3;
+	int data_type = 1;
+
+	std::ofstream file;
+	file.open("density.vol", std::ios::out | std::ios::binary);
+	file.write("VOL",3);
+	file.write((char*)&file_format, 1);
+	file.write((char*)&data_type, 4);
+	file.write((char*)&nx, 4);
+	file.write((char*)&ny, 4);
+	file.write((char*)&nz, 4);
+	file.write((char*)&num_channels, 4);
+	file.write((char*)&xmin, 4);
+	file.write((char*)&ymin, 4);
+	file.write((char*)&zmin, 4);
+	file.write((char*)&xmax, 4);
+	file.write((char*)&ymax, 4);
+	file.write((char*)&zmax, 4);
+
+	for(int i =0 ;i<NX;i++)
+	{
+		for(int j = 0;j < NY; j++)
+		{
+			for(int k = 0; k < NZ; k++)
+			{
+				float tmp = points[i][j][k].get_density();
+				file.write((char*)&tmp,4);
+			}
+		}
+	}
+
+	file.close();
+}
+
+
 int main() {
 	grid points;
 	Eigen::Vector3d center(5.0,2.5,2.5);
@@ -400,6 +452,7 @@ int main() {
 	initialize_filament(points,center,normal,r,t);
 	update_velocity(points);
 	initialize_density(points);
-	print(points);
+	// print(points);
 	isf(points);
+	density_to_vol(points);
 }

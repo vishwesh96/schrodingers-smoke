@@ -38,7 +38,7 @@ ehthumbs.db
 Thumbs.db
 Smoke
 out
-
+/images/*
 # Editor Temporary Files #
 ##########################
 *~

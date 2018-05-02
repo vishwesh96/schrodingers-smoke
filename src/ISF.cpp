@@ -3,7 +3,8 @@
 #include <fstream>
 #include <sstream>
 #include <string>
-
+#include <limits.h>
+#include <algorithm>
 
 #define NX 128
 #define NY 64
@@ -17,6 +18,9 @@
 #define EPSILON 0.01
 
 typedef std::vector< std::vector < std::vector< GridPoint> > > grid;
+
+double min_density = INT_MAX;
+double max_density = INT_MIN;
 
 bool is_zero(double p) {
 	return(p<EPSILON && p>-EPSILON);
@@ -213,7 +217,10 @@ void advect_density(grid & points) {
 				Eigen::Vector3d x(i*LX,j*LY,k*LZ);
 				Eigen::Vector3d v = points[i][j][k].get_v();
 				Eigen::Vector3d y = x - v*DT;
-				points[i][j][k].set_density(interpolate_density(points,y));
+				double density = interpolate_density(points,y);
+				min_density = std::min(density, min_density);
+				max_density = std::max(density, max_density);
+				points[i][j][k].set_density(density);
 			}
 		}
 	}
@@ -303,6 +310,8 @@ void isf(grid & points) {
 	fftw_plan bp = fftw_plan_dft_3d(NX,NY,NZ,in,out,FFTW_BACKWARD,FFTW_MEASURE);
 
 	for ( unsigned int t = 0; t < NUM_TIME_STEPS ; t++) {
+		min_density = INT_MAX;
+		max_density = INT_MIN;
 		schrodinger(in,out,fp,bp,points);
 		normalize(points);
 		pressure_project(in,out,fp,bp,points);
@@ -363,7 +372,10 @@ for (unsigned int i = 0 ; i < points.size() ; i++ ) {
 				vorticity(0) = (points[i][j][k].get_v()(2) - points[i][(j-1+NY)%NY][k].get_v()(2))/LY - (points[i][j][k].get_v()(1) - points[i][j][(k-1+NZ)%NZ].get_v()(1))/LZ;
 				vorticity(1) = (points[i][j][k].get_v()(0) - points[i][j][(k-1+NZ)%NZ].get_v()(0))/LZ - (points[i][j][k].get_v()(2) - points[(i-1+NX)%NX][j][k].get_v()(2))/LX;
 				vorticity(2) = (points[i][j][k].get_v()(1) - points[(i-1+NX)%NX][j][k].get_v()(1))/LX - (points[i][j][k].get_v()(0) - points[i][(j-1+NY)%NY][k].get_v()(0))/LY;
-				points[i][j][k].set_density(vorticity.norm());
+				double density = vorticity.norm();
+				min_density = std::min(density, min_density);
+				max_density = std::max(density, max_density);
+				points[i][j][k].set_density(density);
 			}
 		}
 	}
@@ -401,17 +413,17 @@ void density_to_vol(grid & points) {
 	int nx = NX;
 	int ny = NY;
 	int nz = NZ;
-	int xmin = 0;
-	int ymin = 0;
-	int zmin = 0;
-	int xmax = LX * NX;
-	int ymax = LY * NY;
-	int zmax = LZ * NZ;
+	float xmin = 0;
+	float ymin = 0;
+	float zmin = 0;
+	float xmax = LX * NX;
+	float ymax = LY * NY;
+	float zmax = LZ * NZ;
 	int file_format = 3;
 	int data_type = 1;
 
 	std::ofstream file;
-	file.open("density.vol", std::ios::out | std::ios::binary);
+	file.open("/render/density.vol", std::ios::out | std::ios::binary);
 	file.write("VOL",3);
 	file.write((char*)&file_format, 1);
 	file.write((char*)&data_type, 4);
@@ -433,6 +445,7 @@ void density_to_vol(grid & points) {
 			for(int k = 0; k < NZ; k++)
 			{
 				float tmp = points[i][j][k].get_density();
+				tmp = tmp/(max_density-min_density);
 				file.write((char*)&tmp,4);
 			}
 		}
@@ -452,7 +465,6 @@ int main() {
 	initialize_filament(points,center,normal,r,t);
 	update_velocity(points);
 	initialize_density(points);
-	// print(points);
 	isf(points);
 	density_to_vol(points);
 }

@@ -12,15 +12,18 @@
 #define LX 0.078125
 #define LY 0.078125
 #define LZ 0.078125
-#define NUM_TIME_STEPS 10
-#define DT 1.0/24
 #define H 0.1
 #define EPSILON 0.01
+#define NUM_VELOCITY_ITER 10
 
 typedef std::vector< std::vector < std::vector< GridPoint> > > grid;
+typedef std::vector< std::vector < std::vector< bool> > > volume;
 
 double min_density = INT_MAX;
 double max_density = INT_MIN;
+unsigned int NUM_TIME_STEPS;
+double DT = 1.0/24.0;
+
 
 bool is_zero(double p) {
 	return(p<EPSILON && p>-EPSILON);
@@ -34,9 +37,24 @@ void scale_ifft(fftw_complex * out) {
 	}
 }
 
+void fftshift(grid & points) {
+	
+	for (unsigned int i = 0 ; i < points.size()/2 ; i++ ) {
+		for(unsigned int j = 0; j< points[i].size()/2; j++) {
+			for(unsigned int k = 0; k < points[i][j].size()/2; k++) {
+				std::swap(points[i][j][k], points[i+NX/2][j+NY/2][k+NZ/2]);
+				std::swap(points[i+NX/2][j][k], points[i][j+NY/2][k+NZ/2]);
+				std::swap(points[i+NX/2][j+NY/2][k], points[i][j][k+NZ/2]);
+				std::swap(points[i][j+NY/2][k], points[i+NX/2][j][k+NZ/2]);
+			}
+		}
+	}
+
+}
+
 void print(grid &points) {
 	for (unsigned int i = 0 ; i < points.size() ; i++ ) {
-		for(unsigned int j = 0; j<points[i].size(); j++) {
+		for(unsigned int j = 0; j< points[i].size(); j++) {
 			for(unsigned int k = 0; k < points[i][j].size(); k++) {
 				// Comp2 psi = points[i][j][k].get_psi();
 				printf("%d %d %d : %f\n",i,j,k,points[i][j][k].get_density());
@@ -158,23 +176,24 @@ void update_velocity(grid & points) {
 }
 
 //Assuming only 1 length
-void maintain_bound(Eigen::Vector3d & y) {
+void maintain_bound(Eigen::Vector3d &y) {
 	double X = LX * NX, Y = LY * NY, Z = LZ * NZ;
-	if(y(0)>X) 
-		y(0) -= X;
-	if(y(1)>Y) 
-		y(1) -= Y;
-	if(y(2)>Z) 
-		y(2) -= Z;
+	double epsilon = 0.000001;
+	if(y(0)>=X)
+		y(0) = y(0) - X + epsilon;
+	if(y(1)>=Y) 
+		y(1) = y(1) - Y + epsilon;
+	if(y(2)>=Z) 
+		y(2) = y(2) - Z + epsilon;
 	if(y(0)<0) 
-		y(0) += X;
+		y(0) = y(0) + X - epsilon;
 	if(y(1)<0) 
-		y(1) += Y;
+		y(1) = y(1) + Y - epsilon;
 	if(y(2)<0) 
-		y(2) += Z;
+		y(2) = y(2) + Z - epsilon;
 }
 
-std::vector<int> find_grid_cell(Eigen::Vector3d y) {
+std::vector<int> find_grid_cell(Eigen::Vector3d &y) {
 	std::vector<int> n(3);
 	n[0] = y(0)/LX;
 	n[1] = y(1)/LY;
@@ -182,7 +201,7 @@ std::vector<int> find_grid_cell(Eigen::Vector3d y) {
 	return n;
 }
 
-double interpolate_density(grid & points,Eigen::Vector3d y){
+double interpolate_density(grid & points,Eigen::Vector3d &y){
 	maintain_bound(y);
 	std::vector<int> n = find_grid_cell(y);
 
@@ -227,20 +246,20 @@ void advect_density(grid & points) {
 }
 
 void mult_exp(grid & points) {
-for (unsigned int i = 0 ; i < points.size() ; i++ ) {
-		for(unsigned int j = 0; j<points[i].size(); j++) {
-			for(unsigned int k = 0; k < points[i][j].size(); k++) {
-				// double lambda = -4.0*M_PI*M_PI*( pow( ((i-64.0)/(10.0)),2) + pow( ((j-32.0)/(5.0)),2) + pow(((k-32.0)/(5.0)),2) );
-				double lambda = -4.0*M_PI*M_PI*( pow( (i/(LX*NX)),2) + pow( (j/(LY*NY)),2) + pow((k/(LZ*NZ)),2) );
-				double theta = 0.5 * lambda * DT * H;
-				Complex factor(cos(theta),sin(theta));
-				Comp2 psi = points[i][j][k].get_psi();
-				psi.set_z1(psi.get_z1() * factor);
-				psi.set_z2(psi.get_z2() * factor);
-				points[i][j][k].set_psi(psi);
+	for (unsigned int i = 0 ; i < points.size() ; i++ ) {
+			for(unsigned int j = 0; j<points[i].size(); j++) {
+				for(unsigned int k = 0; k < points[i][j].size(); k++) {
+					double lambda = -4.0*M_PI*M_PI*( pow( ((i-64.0)/(10.0)),2) + pow( ((j-32.0)/(5.0)),2) + pow(((k-32.0)/(5.0)),2) );
+					//double lambda = -4.0*M_PI*M_PI*( pow( (i/(LX*NX)),2) + pow( (j/(LY*NY)),2) + pow((k/(LZ*NZ)),2) );
+					double theta = 0.5 * lambda * DT * H;
+					Complex factor(cos(theta),sin(theta));
+					Comp2 psi = points[i][j][k].get_psi();
+					psi.set_z1(psi.get_z1() * factor);
+					psi.set_z2(psi.get_z2() * factor);
+					points[i][j][k].set_psi(psi);
+				}
 			}
 		}
-	}
 }
 
 void normalize(grid & points) {
@@ -261,7 +280,9 @@ void schrodinger(fftw_complex * in, fftw_complex * out, fftw_plan fp, fftw_plan 
 	fftw_execute(fp);
 	reconvert_psi2(out,points);
 
+	fftshift(points);
 	mult_exp(points);
+	fftshift(points);
 
 	convert_psi1(in,points);
 	fftw_execute(bp);
@@ -302,28 +323,19 @@ void pressure_project(fftw_complex * in, fftw_complex * out, fftw_plan fp, fftw_
 	reconvert_pressure(out,points);
 }
 
-void isf(grid & points) {
-
+void pressure_project(grid& points) {
 	fftw_complex * in = (fftw_complex *) fftw_malloc(sizeof(fftw_complex) * NX * NY * NZ);
 	fftw_complex * out = (fftw_complex *) fftw_malloc(sizeof(fftw_complex) * NX * NY * NZ);
 	fftw_plan fp = fftw_plan_dft_3d(NX,NY,NZ,in,out,FFTW_FORWARD,FFTW_MEASURE);
 	fftw_plan bp = fftw_plan_dft_3d(NX,NY,NZ,in,out,FFTW_BACKWARD,FFTW_MEASURE);
-
-	for ( unsigned int t = 0; t < NUM_TIME_STEPS ; t++) {
-		min_density = INT_MAX;
-		max_density = INT_MIN;
-		schrodinger(in,out,fp,bp,points);
-		normalize(points);
-		pressure_project(in,out,fp,bp,points);
-		update_velocity(points);
-		advect_density(points);
-	}
+	pressure_project(in,out,fp,bp,points);
 	fftw_destroy_plan(fp);
 	fftw_destroy_plan(bp);
 	fftw_free(in);
 	fftw_free(out);
-
 }
+
+
 
 void initialize_filament(grid & points, Eigen::Vector3d center, Eigen::Vector3d normal, double r, double t) {
 for (unsigned int i = 0 ; i < points.size() ; i++ ) {
@@ -365,20 +377,20 @@ for (unsigned int i = 0 ; i < points.size() ; i++ ) {
 }
 
 void initialize_density(grid & points) {
-for (unsigned int i = 0 ; i < points.size() ; i++ ) {
-		for(unsigned int j = 0; j<points[i].size(); j++) {
-			for(unsigned int k = 0; k < points[i][j].size(); k++) {
-				Eigen::Vector3d vorticity;
-				vorticity(0) = (points[i][j][k].get_v()(2) - points[i][(j-1+NY)%NY][k].get_v()(2))/LY - (points[i][j][k].get_v()(1) - points[i][j][(k-1+NZ)%NZ].get_v()(1))/LZ;
-				vorticity(1) = (points[i][j][k].get_v()(0) - points[i][j][(k-1+NZ)%NZ].get_v()(0))/LZ - (points[i][j][k].get_v()(2) - points[(i-1+NX)%NX][j][k].get_v()(2))/LX;
-				vorticity(2) = (points[i][j][k].get_v()(1) - points[(i-1+NX)%NX][j][k].get_v()(1))/LX - (points[i][j][k].get_v()(0) - points[i][(j-1+NY)%NY][k].get_v()(0))/LY;
-				double density = vorticity.norm();
-				min_density = std::min(density, min_density);
-				max_density = std::max(density, max_density);
-				points[i][j][k].set_density(density);
+	for (unsigned int i = 0 ; i < points.size() ; i++ ) {
+			for(unsigned int j = 0; j<points[i].size(); j++) {
+				for(unsigned int k = 0; k < points[i][j].size(); k++) {
+					Eigen::Vector3d vorticity;
+					vorticity(0) = (points[i][j][k].get_v()(2) - points[i][(j-1+NY)%NY][k].get_v()(2))/LY - (points[i][j][k].get_v()(1) - points[i][j][(k-1+NZ)%NZ].get_v()(1))/LZ;
+					vorticity(1) = (points[i][j][k].get_v()(0) - points[i][j][(k-1+NZ)%NZ].get_v()(0))/LZ - (points[i][j][k].get_v()(2) - points[(i-1+NX)%NX][j][k].get_v()(2))/LX;
+					vorticity(2) = (points[i][j][k].get_v()(1) - points[(i-1+NX)%NX][j][k].get_v()(1))/LX - (points[i][j][k].get_v()(0) - points[i][(j-1+NY)%NY][k].get_v()(0))/LY;
+					double density = vorticity.norm();
+					min_density = std::min(density, min_density);
+					max_density = std::max(density, max_density);
+					points[i][j][k].set_density(density);
+				}
 			}
 		}
-	}
 }
 
 //add points1 filament to points filament
@@ -406,9 +418,17 @@ void resize_grid(grid & points) {
 	}
 }
 
+void resize_volume(volume & vol) {
+	vol.resize(NX);
+	for(int i=0;i<NX;i++) {
+		vol[i].resize(NY);
+		for(int j=0;j<NY;j++) {
+			vol[i][j].resize(NZ);
+		}
+	}
+}
 
-
-void density_to_vol(grid & points) {
+void density_to_vol(grid & points, int time_step, std::string & filename) {
 	int num_channels = 1;
 	int nx = NX;
 	int ny = NY;
@@ -421,9 +441,10 @@ void density_to_vol(grid & points) {
 	float zmax = LZ * NZ;
 	int file_format = 3;
 	int data_type = 1;
-
+	std::stringstream ss;
+	ss<<"./vol/"<<filename<<"/"<<time_step<<".vol";
 	std::ofstream file;
-	file.open("/render/density.vol", std::ios::out | std::ios::binary);
+	file.open(ss.str(), std::ios::out | std::ios::binary);
 	file.write("VOL",3);
 	file.write((char*)&file_format, 1);
 	file.write((char*)&data_type, 4);
@@ -438,14 +459,14 @@ void density_to_vol(grid & points) {
 	file.write((char*)&ymax, 4);
 	file.write((char*)&zmax, 4);
 
-	for(int i =0 ;i<NX;i++)
+	for(int i =0 ;i<NZ;i++)
 	{
 		for(int j = 0;j < NY; j++)
 		{
-			for(int k = 0; k < NZ; k++)
+			for(int k = 0; k < NX; k++)
 			{
-				float tmp = points[i][j][k].get_density();
-				tmp = tmp/(max_density-min_density);
+				float tmp = points[k][j][i].get_density();
+				tmp = tmp/(max_density);
 				file.write((char*)&tmp,4);
 			}
 		}
@@ -455,7 +476,130 @@ void density_to_vol(grid & points) {
 }
 
 
-int main() {
+volume sphere_volume(Eigen::Vector3d center, double radius) {
+	volume vol;
+	resize_volume(vol);
+	for (unsigned int i = 0 ; i < vol.size() ; i++ ) {
+		for(unsigned int j = 0; j<vol[i].size(); j++) {
+			for(unsigned int k = 0; k < vol[i][j].size(); k++) {
+				Eigen::Vector3d pos(i*LX,j*LY,k*LZ);
+				vol[i][j][k] = (pos-center).norm()<radius;
+			}
+		}
+	}
+	return vol;
+}
+
+void initialize_density_volume(grid &points, volume & vol, double density) {
+	double epsilon = 0.000001;
+	for (unsigned int i = 0 ; i < points.size() ; i++ ) {
+		for(unsigned int j = 0; j<points[i].size(); j++) {
+			for(unsigned int k = 0; k < points[i][j].size(); k++) {
+				if(vol[i][j][k])
+					points[i][j][k].set_density(density);
+				else
+					points[i][j][k].set_density(epsilon);
+			}
+		}
+	}
+	min_density = epsilon;
+	max_density = density;
+}	
+
+void constraint_projection(grid &points, volume &vol, Eigen::Vector3d v, double t) {
+	Eigen::Vector3d kw = v/H;
+	for (unsigned int i = 0 ; i < points.size() ; i++ ) {
+			for(unsigned int j = 0; j<points[i].size(); j++) {
+				for(unsigned int k = 0; k < points[i][j].size(); k++) {
+					if(vol[i][j][k]) {
+						Eigen::Vector3d pos(i*LX,j*LY,k*LZ);
+						double theta = kw.dot(pos - v*t/2.0);
+						Complex phi(cos(theta),sin(theta));
+						Comp2 psi = points[i][j][k].get_psi();
+						points[i][j][k].set_psi(Comp2(std::abs(psi.get_z1())*phi,std::abs(psi.get_z2())*phi));
+					}
+				}
+			}
+		}
+	pressure_project(points);
+}
+
+void initialize_psi_velocity(grid & points, volume & vol, Eigen::Vector3d v) {
+	Eigen::Vector3d kw = v/H;
+	for (unsigned int i = 0 ; i < points.size() ; i++ ) {
+		for(unsigned int j = 0; j<points[i].size(); j++) {
+			for(unsigned int k = 0; k < points[i][j].size(); k++) {
+				Eigen::Vector3d pos(i*LX,j*LY,k*LZ);
+				double theta = kw.dot(pos);
+				Complex phi(cos(theta),sin(theta));
+				if(vol[i][j][k])
+					points[i][j][k].set_psi(Comp2(phi,Complex(EPSILON,0.0)));
+				else
+					points[i][j][k].set_psi(Comp2(Complex(1.0,0.0),Complex(EPSILON,0.0)));
+			}
+		}
+	}
+	normalize(points);
+	for(int i=0;i<NUM_VELOCITY_ITER;i++){
+		constraint_projection(points,vol,v,0.0);
+	}
+}
+
+
+void isf(grid & points, volume & vol, Eigen::Vector3d v, std::string & filename) {
+
+	fftw_complex * in = (fftw_complex *) fftw_malloc(sizeof(fftw_complex) * NX * NY * NZ);
+	fftw_complex * out = (fftw_complex *) fftw_malloc(sizeof(fftw_complex) * NX * NY * NZ);
+	fftw_plan fp = fftw_plan_dft_3d(NX,NY,NZ,in,out,FFTW_FORWARD,FFTW_MEASURE);
+	fftw_plan bp = fftw_plan_dft_3d(NX,NY,NZ,in,out,FFTW_BACKWARD,FFTW_MEASURE);
+
+	for ( unsigned int t = 0; t < NUM_TIME_STEPS ; t++) {
+		printf("Iteration Number : %d\n",t );
+		density_to_vol(points, t, filename);
+		min_density = INT_MAX;
+		max_density = INT_MIN;
+		schrodinger(in,out,fp,bp,points);
+		normalize(points);
+		pressure_project(in,out,fp,bp,points);
+		// constraint_projection(points,vol,v,t*DT);
+		update_velocity(points);
+		advect_density(points);
+	}
+	fftw_destroy_plan(fp);
+	fftw_destroy_plan(bp);
+	fftw_free(in);
+	fftw_free(out);
+
+}
+
+void isf(grid & points, std::string & filename) {
+
+	fftw_complex * in = (fftw_complex *) fftw_malloc(sizeof(fftw_complex) * NX * NY * NZ);
+	fftw_complex * out = (fftw_complex *) fftw_malloc(sizeof(fftw_complex) * NX * NY * NZ);
+	fftw_plan fp = fftw_plan_dft_3d(NX,NY,NZ,in,out,FFTW_FORWARD,FFTW_MEASURE);
+	fftw_plan bp = fftw_plan_dft_3d(NX,NY,NZ,in,out,FFTW_BACKWARD,FFTW_MEASURE);
+
+	for ( unsigned int t = 0; t < NUM_TIME_STEPS ; t++) {
+		printf("Iteration Number : %d\n",t );
+		density_to_vol(points, t, filename);
+		min_density = INT_MAX;
+		max_density = INT_MIN;
+		schrodinger(in,out,fp,bp,points);
+		normalize(points);
+		pressure_project(in,out,fp,bp,points);
+		update_velocity(points);
+		advect_density(points);
+	}
+	fftw_destroy_plan(fp);
+	fftw_destroy_plan(bp);
+	fftw_free(in);
+	fftw_free(out);
+
+}
+
+int main(int argc, char* argv[]) {
+	std::string filename = argv[1];
+	NUM_TIME_STEPS = std::atoi(argv[2]);
 	grid points;
 	Eigen::Vector3d center(5.0,2.5,2.5);
 	Eigen::Vector3d normal(-1.0,0.0,0.0);
@@ -465,6 +609,18 @@ int main() {
 	initialize_filament(points,center,normal,r,t);
 	update_velocity(points);
 	initialize_density(points);
-	isf(points);
-	density_to_vol(points);
+	isf(points, filename);
+
+
+	/*grid points;
+	Eigen::Vector3d center(5.0,2.5,2.5);
+	double radius = 0.5;	
+	double density = 0.99;
+	Eigen::Vector3d velocity(-10.0,0.0,0.0);
+	resize_grid(points);
+	volume sphere_vol = sphere_volume(center,radius);
+	initialize_density_volume(points,sphere_vol,density);
+	initialize_psi_velocity(points,sphere_vol,velocity);
+	isf(points,sphere_vol,velocity);
+	*/
 }

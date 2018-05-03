@@ -39,6 +39,7 @@ Thumbs.db
 Smoke
 out
 /images/*
+/vol/*
 # Editor Temporary Files #
 ##########################
 *~

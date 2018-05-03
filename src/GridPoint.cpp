@@ -21,6 +21,10 @@ Eigen::Vector3d GridPoint::get_v() const {
 	return this->v;
 }
 
+std::vector<double> GridPoint::get_color() const {
+	return this->color;
+}
+
 void GridPoint::set_psi(Comp2 psi)  {
 	this->psi = psi;
 }
@@ -39,6 +43,10 @@ void GridPoint::set_div(double div) {
 
 void GridPoint::set_v(Eigen::Vector3d v) {
 	this->v = v;
+}
+
+void GridPoint::set_color(std::vector<double> color) {
+	this->color = color;
 }
 
 void GridPoint::normalize() {

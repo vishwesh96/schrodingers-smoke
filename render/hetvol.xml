@@ -13,12 +13,10 @@
 			<string name="filename" value="density.vol"/>
 		</volume>
 
-		<volume name="albedo" type="constvolume">
-			<rgb  name="value"  value="0.99  0.3  0.3"/>
+		<volume name="albedo" type="gridvolume">
+			<string  name="filename"  value="color.vol"/>
 		</volume>
-        <volume  type="constvolume"  name="orientation">
-                <vector  name="value"  x="0"  y="1"  z="0"/>
-        </volume>
+
 		<float name="scale" value="5.0"/>
 	</medium>
 	<shape type="obj">

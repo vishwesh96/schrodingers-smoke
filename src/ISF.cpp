@@ -20,6 +20,8 @@ typedef std::vector< std::vector < std::vector< GridPoint> > > grid;
 struct Volume {
 	 std::vector< std::vector < std::vector< bool> > > volume;
 	 Eigen::Vector3d velocity;
+	 std::vector<double> color;
+	 double density;
 };
 
 double max_density = INT_MIN;
@@ -231,7 +233,45 @@ double interpolate_density(grid & points,Eigen::Vector3d &y){
 	return density;
 }
 
-void advect_density(grid & points) {
+
+std::vector<double> interpolate_color1(grid & points,Eigen::Vector3d &y){
+	maintain_bound(y);
+	std::vector<int> n = find_grid_cell(y);
+
+	std::vector<double> c1 = points[n[0]][n[1]][n[2]].get_color();
+	std::vector<double> c2 = points[(n[0]+1)%NX][n[1]][n[2]].get_color();
+	std::vector<double> c3 = points[(n[0]+1)%NX][(n[1]+1)%NY][n[2]].get_color();
+	std::vector<double> c4 = points[n[0]][(n[1]+1)%NY][n[2]].get_color();
+	std::vector<double> c5 = points[n[0]][n[1]][(n[2]+1)%NZ].get_color();
+	std::vector<double> c6 = points[(n[0]+1)%NX][n[1]][(n[2]+1)%NZ].get_color();
+	std::vector<double> c7 = points[(n[0]+1)%NX][(n[1]+1)%NY][(n[2]+1)%NZ].get_color();
+	std::vector<double> c8 = points[n[0]][(n[1]+1)%NY][(n[2]+1)%NZ].get_color();
+
+	double z1 = n[0]*LX;
+	double z2 = n[1]*LY;
+	double z3 = n[2]*LZ;
+	double z4 = (n[0]+1)*LX;
+	double z5 = (n[1]+1)*LY;
+	double z6 = (n[2]+1)*LZ;
+
+	double y0 = y(0); 
+	double y1 = y(1); 
+	double y2 = y(2);
+
+	std::vector<double> color(3);
+	for(int i=0;i<3;i++){
+		color[i] = ( (z6-y2) * (c1[i]*(z4-y0)*(z5-y1) + c2[i]*(y0-z1)*(z5-y1) + c3[i]*(y0-z1)*(y1-z2) + c4[i]*(z4-y0)*(y1-z2)) + (y2-z3)*(c5[i]*(z4-y0)*(z5-y1) + c6[i]*(y0-z1)*(z5-y1) + c7[i]*(y0-z1)*(y1-z2) + c8[i]*(z4-y0)*(y1-z2)) )/(LX*LY*LZ);
+	}
+	return color;
+}
+
+//TODO : Nearest neighbour interpolation
+std::vector<double> interpolate_color2(grid & points,Eigen::Vector3d &y){
+	std::vector<double> color;
+	return color;
+}
+
+void advect_density_and_color(grid & points) {
 	for (unsigned int i = 0 ; i < points.size() ; i++ ) {
 		for(unsigned int j = 0; j<points[i].size(); j++) {
 			for(unsigned int k = 0; k < points[i][j].size(); k++) {
@@ -239,8 +279,10 @@ void advect_density(grid & points) {
 				Eigen::Vector3d v = points[i][j][k].get_v();
 				Eigen::Vector3d y = x - v*DT;
 				double density = interpolate_density(points,y);
+				std::vector<double> color = interpolate_color1(points,y);
 				max_density = std::max(density, max_density);
 				points[i][j][k].set_density(density);
+				points[i][j][k].set_color(color);
 			}
 		}
 	}
@@ -338,7 +380,7 @@ void pressure_project(grid& points) {
 
 
 
-void initialize_filament(grid & points, Eigen::Vector3d center, Eigen::Vector3d normal, double r, double t) {
+void initialize_filament(grid & points, Eigen::Vector3d center, Eigen::Vector3d normal, double r, double t, std::vector<double> color) {
 for (unsigned int i = 0 ; i < points.size() ; i++ ) {
 		for(unsigned int j = 0; j<points[i].size(); j++) {
 			for(unsigned int k = 0; k < points[i][j].size(); k++) {
@@ -347,6 +389,7 @@ for (unsigned int i = 0 ; i < points.size() ; i++ ) {
 				double theta = 0.0;
 				/*if(d>-t/2.0 && d<t/2.0 && (p-center).squaredNorm() - pow(d,2) < pow(r,2)) {
 					theta = M_PI * (1.0 + 2.0*d/t);
+					points[i][j][k].set_color(color);
 				}*/
 				if ( (p-center).squaredNorm() - d*d < r*r ) {
 					if ( d > 0 && d <= t/2.0) {
@@ -354,27 +397,42 @@ for (unsigned int i = 0 ; i < points.size() ; i++ ) {
 					} else if (d <= 0 && d>= -t/2.0){
 						theta = -M_PI * (2.0*d/t + 1.0);
 					}
+					points[i][j][k].set_color(color);
 				}
-				Comp2 psi = points[i][j][k].get_psi();
-				psi.set_z1(Complex(cos(theta),sin(theta)));
-				psi.set_z2(Complex(EPSILON,0.0));
-				points[i][j][k].set_psi(psi);
+				points[i][j][k].set_psi(Comp2(Complex(cos(theta),sin(theta)),Complex(EPSILON,0.0)));
 			}
 		}
 	}
-
-	fftw_complex * in = (fftw_complex *) fftw_malloc(sizeof(fftw_complex) * NX * NY * NZ);
-	fftw_complex * out = (fftw_complex *) fftw_malloc(sizeof(fftw_complex) * NX * NY * NZ);
-	fftw_plan fp = fftw_plan_dft_3d(NX,NY,NZ,in,out,FFTW_FORWARD,FFTW_MEASURE);
-	fftw_plan bp = fftw_plan_dft_3d(NX,NY,NZ,in,out,FFTW_BACKWARD,FFTW_MEASURE);
-	
-	
 	normalize(points);
-	pressure_project(in,out,fp,bp,points);
-	fftw_destroy_plan(fp);
-	fftw_destroy_plan(bp);
-	fftw_free(in);
-	fftw_free(out);
+	pressure_project(points);
+}
+
+void add_filament(grid& points, Eigen::Vector3d center, Eigen::Vector3d normal, double r, double t, std::vector<double> color) {
+for (unsigned int i = 0 ; i < points.size() ; i++ ) {
+		for(unsigned int j = 0; j<points[i].size(); j++) {
+			for(unsigned int k = 0; k < points[i][j].size(); k++) {
+				Eigen::Vector3d p(i*LX,j*LY,k*LZ);
+				double d = (p-center).dot(normal.normalized());
+				double theta = 0.0;
+				/*if(d>-t/2.0 && d<t/2.0 && (p-center).squaredNorm() - pow(d,2) < pow(r,2)) {
+					theta = M_PI * (1.0 + 2.0*d/t);
+					points[i][j][k].set_color(color);
+				}*/
+				if ( (p-center).squaredNorm() - d*d < r*r ) {
+					if ( d > 0 && d <= t/2.0) {
+						theta = -M_PI * (2.0*d/t - 1.0);	
+					} else if (d <= 0 && d>= -t/2.0){
+						theta = -M_PI * (2.0*d/t + 1.0);
+					}
+					points[i][j][k].set_color(color);
+				}
+				Comp2 psi = points[i][j][k].get_psi();
+				points[i][j][k].set_psi(Comp2(psi.get_z1()*Complex(cos(theta),sin(theta)),psi.get_z2()*Complex(EPSILON,0.0)));
+			}
+		}
+	}
+	normalize(points);
+	pressure_project(points);
 }
 
 void initialize_density(grid & points) {
@@ -393,20 +451,6 @@ void initialize_density(grid & points) {
 		}
 }
 
-//add points1 filament to points filament
-void add_filament(grid & points, grid &points1) {
-	for (unsigned int i = 0 ; i < points.size() ; i++ ) {
-		for(unsigned int j = 0; j<points[i].size(); j++) {
-			for(unsigned int k = 0; k < points[i][j].size(); k++) {
-				Comp2 psi = points[i][j][k].get_psi();
-				Comp2 psi1 = points1[i][j][k].get_psi();
-				psi.set_z1(psi.get_z1() * psi1.get_z1());
-				psi.set_z2(psi.get_z2() * psi1.get_z2());
-				points[i][j][k].set_psi(psi);
-			}
-		}
-	}
-}
 
 void resize_grid(grid & points) {
 	points.resize(NX);
@@ -429,7 +473,8 @@ void resize_volume(Volume & vol) {
 }
 
 void density_to_vol(grid & points, int time_step, std::string & filename) {
-	int num_channels = 1;
+	int num_channels_density = 1;
+	int num_channels_color = 3;
 	int nx = NX;
 	int ny = NY;
 	int nz = NZ;
@@ -441,42 +486,72 @@ void density_to_vol(grid & points, int time_step, std::string & filename) {
 	float zmax = LZ * NZ;
 	int file_format = 3;
 	int data_type = 1;
-	std::stringstream ss;
-	ss<<"./vol/"<<filename<<"/"<<time_step<<".vol";
-	std::ofstream file;
-	file.open(ss.str(), std::ios::out | std::ios::binary);
-	file.write("VOL",3);
-	file.write((char*)&file_format, 1);
-	file.write((char*)&data_type, 4);
-	file.write((char*)&nx, 4);
-	file.write((char*)&ny, 4);
-	file.write((char*)&nz, 4);
-	file.write((char*)&num_channels, 4);
-	file.write((char*)&xmin, 4);
-	file.write((char*)&ymin, 4);
-	file.write((char*)&zmin, 4);
-	file.write((char*)&xmax, 4);
-	file.write((char*)&ymax, 4);
-	file.write((char*)&zmax, 4);
+	std::stringstream ss_density,ss_color;
+	ss_density<<"./vol/"<<filename<<"/density/"<<time_step<<".vol";
+	ss_color<<"./vol/"<<filename<<"/color/"<<time_step<<".vol";
 
-	for(int i =0 ;i<NZ;i++)
-	{
-		for(int j = 0;j < NY; j++)
-		{
-			for(int k = 0; k < NX; k++)
-			{
+	std::ofstream file_density,file_color;
+	file_density.open(ss_density.str(), std::ios::out | std::ios::binary);
+	file_color.open(ss_color.str(), std::ios::out | std::ios::binary);
+
+	file_density.write("VOL",3);
+	file_density.write((char*)&file_format, 1);
+	file_density.write((char*)&data_type, 4);
+	file_density.write((char*)&nx, 4);
+	file_density.write((char*)&ny, 4);
+	file_density.write((char*)&nz, 4);
+	file_density.write((char*)&num_channels_density, 4);
+	file_density.write((char*)&xmin, 4);
+	file_density.write((char*)&ymin, 4);
+	file_density.write((char*)&zmin, 4);
+	file_density.write((char*)&xmax, 4);
+	file_density.write((char*)&ymax, 4);
+	file_density.write((char*)&zmax, 4);
+
+
+	file_color.write("VOL",3);
+	file_color.write((char*)&file_format, 1);
+	file_color.write((char*)&data_type, 4);
+	file_color.write((char*)&nx, 4);
+	file_color.write((char*)&ny, 4);
+	file_color.write((char*)&nz, 4);
+	file_color.write((char*)&num_channels_color, 4);
+	file_color.write((char*)&xmin, 4);
+	file_color.write((char*)&ymin, 4);
+	file_color.write((char*)&zmin, 4);
+	file_color.write((char*)&xmax, 4);
+	file_color.write((char*)&ymax, 4);
+	file_color.write((char*)&zmax, 4);
+
+	for(int i =0 ;i<NZ;i++) {
+		for(int j = 0;j < NY; j++) {
+			for(int k = 0; k < NX; k++) {
 				float tmp = points[k][j][i].get_density();
 				tmp = tmp/(max_density);
-				file.write((char*)&tmp,4);
+				file_density.write((char*)&tmp,4);
 			}
 		}
 	}
 
-	file.close();
+
+	for(int i =0 ;i<NZ;i++) {
+		for(int j = 0;j < NY; j++) {
+			for(int k = 0; k < NX; k++) {
+				std::vector<double> tmp = points[k][j][i].get_color();
+				for(int l=0;l<num_channels_color;l++) {
+					float tmp_channel = tmp[l];
+					file_color.write((char*)&tmp_channel,4);
+				}
+			}
+		}
+	}
+
+	file_density.close();
+	file_color.close();
 }
 
 
-Volume cylinder_volume(Eigen::Vector3d center, double radius, double thickness, Eigen::Vector3d velocity) {
+Volume cylinder_volume(Eigen::Vector3d center, double radius, double thickness, Eigen::Vector3d velocity, std::vector<double> color, double density) {
 	Volume vol;
 	resize_volume(vol);
 	for (unsigned int i = 0 ; i < vol.volume.size() ; i++ ) {
@@ -490,10 +565,12 @@ Volume cylinder_volume(Eigen::Vector3d center, double radius, double thickness, 
 		}
 	}
 	vol.velocity = velocity;
+	vol.color = color;
+	vol.density = density;
 	return vol;
 }
 
-Volume sphere_volume(Eigen::Vector3d center, double radius, Eigen::Vector3d velocity) {
+Volume sphere_volume(Eigen::Vector3d center, double radius, Eigen::Vector3d velocity, std::vector<double> color, double density) {
 	Volume vol;
 	resize_volume(vol);
 	for (unsigned int i = 0 ; i < vol.volume.size() ; i++ ) {
@@ -505,17 +582,20 @@ Volume sphere_volume(Eigen::Vector3d center, double radius, Eigen::Vector3d velo
 		}
 	}
 	vol.velocity = velocity;
+	vol.color = color;
+	vol.density = density;
 	return vol;
 }
 
-void initialize_density_volume(grid &points, std::vector<Volume> & vols, std::vector<double> &densities) {
+void initialize_density_volume(grid &points, std::vector<Volume> & vols) {
 	for (unsigned int i = 0 ; i < points.size() ; i++ ) {
 		for(unsigned int j = 0; j<points[i].size(); j++) {
 			for(unsigned int k = 0; k < points[i][j].size(); k++) {
 				for(unsigned int l=0; l <vols.size(); l++) {
-					max_density = std::max(max_density,densities[l]);
+					max_density = std::max(max_density,vols[l].density);
 					if(vols[l].volume[i][j][k]){
-						points[i][j][k].set_density(densities[l]);
+						points[i][j][k].set_density(vols[l].density);
+						points[i][j][k].set_color(vols[l].color);
 					}
 				}
 			}
@@ -584,7 +664,7 @@ void initialize_psi_velocity(grid & points, std::vector<Volume> & vols) {
 }
 
 
-void isf(grid & points, std::vector<Volume> &vols, std::vector<double> &densities, std::string & filename) {
+void isf(grid & points, std::vector<Volume> &vols, std::string & filename) {
 
 	fftw_complex * in = (fftw_complex *) fftw_malloc(sizeof(fftw_complex) * NX * NY * NZ);
 	fftw_complex * out = (fftw_complex *) fftw_malloc(sizeof(fftw_complex) * NX * NY * NZ);
@@ -600,8 +680,8 @@ void isf(grid & points, std::vector<Volume> &vols, std::vector<double> &densitie
 		pressure_project(in,out,fp,bp,points);
 		constraint_projection(points,vols,t*DT);
 		update_velocity(points);
-		advect_density(points);
-		initialize_density_volume(points,vols,densities);
+		advect_density_and_color(points);
+		initialize_density_volume(points,vols);
 	}
 	fftw_destroy_plan(fp);
 	fftw_destroy_plan(bp);
@@ -625,7 +705,7 @@ void isf(grid & points, std::string & filename) {
 		normalize(points);
 		pressure_project(in,out,fp,bp,points);
 		update_velocity(points);
-		advect_density(points);
+		advect_density_and_color(points);
 	}
 	fftw_destroy_plan(fp);
 	fftw_destroy_plan(bp);
@@ -640,12 +720,18 @@ int main(int argc, char* argv[]) {
 
 	//1 Filament
 	// grid points;
-	// Eigen::Vector3d center(5.0,2.5,2.5);
-	// Eigen::Vector3d normal(-1.0,0.0,0.0);
-	// double r = 1.5;
-	// double t = 5*LX;
+	// Eigen::Vector3d center1(5.0,2.5,2.5);
+	// Eigen::Vector3d normal1(-1.0,0.0,0.0);
+	// double r1 = 1.5;
+	// double t1 = 5*LX;
+	
+	// std::vector<double> color1(3);
+	// color1[0] = 0.99;
+	// color1[1] = 0.3;
+	// color1[2] = 0.3;
+
 	// resize_grid(points);
-	// initialize_filament(points,center,normal,r,t);
+	// initialize_filament(points,center1,normal1,r1,t1,color1);
 	// update_velocity(points);
 	// initialize_density(points);
 	// isf(points, filename);
@@ -660,13 +746,24 @@ int main(int argc, char* argv[]) {
 
 	// resize_grid(points);
 	// std::vector<Volume> vols;
-	// std::vector<double> densities;
-	
-	// densities.push_back(0.99);
-	// densities.push_back(0.99);
-	// vols.push_back(sphere_volume(center1,radius1,velocity1));
-	// vols.push_back(sphere_volume(center2,radius2,velocity2));
-	// initialize_density_volume(points,vols,densities);
+	// std::vector<double> color1(3);
+	// std::vector<double> color2(3);
+	// double density1,density2;
+
+	// color1[0] = 0.99;
+	// color1[1] = 0.3;
+	// color1[2] = 0.3;
+
+	// color2[0] = 0.3;
+	// color2[1] = 0.3;
+	// color2[2] = 0.99;
+
+	// density1 = 0.99;
+	// density2 = 0.99;
+
+	// vols.push_back(sphere_volume(center1,radius1,velocity1,color1,density1));
+	// vols.push_back(sphere_volume(center2,radius2,velocity2,color2,density2));
+	// initialize_density_volume(points,vols);
 
 	// initialize_psi_velocity(points,vols);
 	// isf(points,filename);	
@@ -682,13 +779,24 @@ int main(int argc, char* argv[]) {
 
 	resize_grid(points);
 	std::vector<Volume> vols;
-	std::vector<double> densities;
+	std::vector<double> color1(3);
+	std::vector<double> color2(3);
+	double density1,density2;
 
-	densities.push_back(0.99);
-	densities.push_back(0.99);
-	vols.push_back(cylinder_volume(center1,radius1,thickness1,velocity1));
-	vols.push_back(sphere_volume(center2,radius2,velocity2));
-	initialize_density_volume(points,vols,densities);
+	color1[0] = 0.3;
+	color1[1] = 0.3;
+	color1[2] = 0.99;
+
+	color2[0] = 0.99;
+	color2[1] = 0.3;
+	color2[2] = 0.3;
+
+	density1 = 0.99;
+	density2 = 0.99;
+
+	vols.push_back(cylinder_volume(center1,radius1,thickness1,velocity1,color1,density1));
+	vols.push_back(sphere_volume(center2,radius2,velocity2,color2,density2));
+	initialize_density_volume(points,vols);
 	initialize_psi_velocity(points,vols);
-	isf(points,vols,densities,filename);	
+	isf(points,vols,filename);	
 }

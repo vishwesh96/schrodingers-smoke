@@ -1,6 +1,8 @@
 #include <complex>
 #include <Comp2.h>
 
+#define EPSILON 0.01
+
 class GridPoint {
 
 	private:
@@ -11,7 +13,10 @@ class GridPoint {
 		Eigen::Vector3d v;
 
 	public:
-		GridPoint() {};
+		GridPoint() {
+			this->rho = 0.0;
+			this->psi = Comp2(Complex(1.0,0.0),Complex(EPSILON,0.0));
+		};
 
 		Comp2 get_psi() const;
 

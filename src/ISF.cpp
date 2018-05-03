@@ -22,7 +22,6 @@ struct Volume {
 	 Eigen::Vector3d velocity;
 };
 
-double min_density = INT_MAX;
 double max_density = INT_MIN;
 unsigned int NUM_TIME_STEPS;
 double DT = 1.0/24.0;
@@ -240,7 +239,6 @@ void advect_density(grid & points) {
 				Eigen::Vector3d v = points[i][j][k].get_v();
 				Eigen::Vector3d y = x - v*DT;
 				double density = interpolate_density(points,y);
-				min_density = std::min(density, min_density);
 				max_density = std::max(density, max_density);
 				points[i][j][k].set_density(density);
 			}
@@ -388,7 +386,6 @@ void initialize_density(grid & points) {
 					vorticity(1) = (points[i][j][k].get_v()(0) - points[i][j][(k-1+NZ)%NZ].get_v()(0))/LZ - (points[i][j][k].get_v()(2) - points[(i-1+NX)%NX][j][k].get_v()(2))/LX;
 					vorticity(2) = (points[i][j][k].get_v()(1) - points[(i-1+NX)%NX][j][k].get_v()(1))/LX - (points[i][j][k].get_v()(0) - points[i][(j-1+NY)%NY][k].get_v()(0))/LY;
 					double density = vorticity.norm();
-					min_density = std::min(density, min_density);
 					max_density = std::max(density, max_density);
 					points[i][j][k].set_density(density);
 				}
@@ -479,6 +476,23 @@ void density_to_vol(grid & points, int time_step, std::string & filename) {
 }
 
 
+Volume cylinder_volume(Eigen::Vector3d center, double radius, double thickness, Eigen::Vector3d velocity) {
+	Volume vol;
+	resize_volume(vol);
+	for (unsigned int i = 0 ; i < vol.volume.size() ; i++ ) {
+		for(unsigned int j = 0; j<vol.volume[i].size(); j++) {
+			for(unsigned int k = 0; k < vol.volume[i][j].size(); k++) {
+				Eigen::Vector3d pos(i*LX,j*LY,k*LZ);
+				Eigen::Vector2d pos1(pos(1),pos(2));
+				Eigen::Vector2d center1(center(1),center(2));
+				vol.volume[i][j][k] = (pos1-center1).norm()<radius && abs(pos(0) - center(0)) < thickness/2.0;
+			}
+		}
+	}
+	vol.velocity = velocity;
+	return vol;
+}
+
 Volume sphere_volume(Eigen::Vector3d center, double radius, Eigen::Vector3d velocity) {
 	Volume vol;
 	resize_volume(vol);
@@ -494,19 +508,19 @@ Volume sphere_volume(Eigen::Vector3d center, double radius, Eigen::Vector3d velo
 	return vol;
 }
 
-void initialize_density_volume(grid &points, std::vector<Volume> & vols, double density) {
+void initialize_density_volume(grid &points, std::vector<Volume> & vols, std::vector<double> &densities) {
 	for (unsigned int i = 0 ; i < points.size() ; i++ ) {
 		for(unsigned int j = 0; j<points[i].size(); j++) {
 			for(unsigned int k = 0; k < points[i][j].size(); k++) {
 				for(unsigned int l=0; l <vols.size(); l++) {
+					max_density = std::max(max_density,densities[l]);
 					if(vols[l].volume[i][j][k]){
-						points[i][j][k].set_density(density);
+						points[i][j][k].set_density(densities[l]);
 					}
 				}
 			}
 		}
 	}
-	max_density = density;
 }	
 
 void constraint_projection(grid &points, Volume &vol, double t) {
@@ -570,7 +584,7 @@ void initialize_psi_velocity(grid & points, std::vector<Volume> & vols) {
 }
 
 
-void isf(grid & points, Volume &vol, std::string & filename) {
+void isf(grid & points, std::vector<Volume> &vols, std::vector<double> &densities, std::string & filename) {
 
 	fftw_complex * in = (fftw_complex *) fftw_malloc(sizeof(fftw_complex) * NX * NY * NZ);
 	fftw_complex * out = (fftw_complex *) fftw_malloc(sizeof(fftw_complex) * NX * NY * NZ);
@@ -578,16 +592,16 @@ void isf(grid & points, Volume &vol, std::string & filename) {
 	fftw_plan bp = fftw_plan_dft_3d(NX,NY,NZ,in,out,FFTW_BACKWARD,FFTW_MEASURE);
 
 	for ( unsigned int t = 0; t < NUM_TIME_STEPS ; t++) {
-		printf("Iteration Number : %d\n",t );
+		fprintf(stderr,"Iteration Number : %d\n",t);
 		density_to_vol(points, t, filename);
-		min_density = INT_MAX;
 		max_density = INT_MIN;
 		schrodinger(in,out,fp,bp,points);
 		normalize(points);
 		pressure_project(in,out,fp,bp,points);
-		constraint_projection(points,vol,t*DT);
+		constraint_projection(points,vols,t*DT);
 		update_velocity(points);
 		advect_density(points);
+		initialize_density_volume(points,vols,densities);
 	}
 	fftw_destroy_plan(fp);
 	fftw_destroy_plan(bp);
@@ -606,7 +620,6 @@ void isf(grid & points, std::string & filename) {
 	for ( unsigned int t = 0; t < NUM_TIME_STEPS ; t++) {
 		printf("Iteration Number : %d\n",t );
 		density_to_vol(points, t, filename);
-		min_density = INT_MAX;
 		max_density = INT_MIN;
 		schrodinger(in,out,fp,bp,points);
 		normalize(points);
@@ -625,7 +638,7 @@ int main(int argc, char* argv[]) {
 	std::string filename = argv[1];
 	NUM_TIME_STEPS = std::atoi(argv[2]);
 
-
+	//1 Filament
 	// grid points;
 	// Eigen::Vector3d center(5.0,2.5,2.5);
 	// Eigen::Vector3d normal(-1.0,0.0,0.0);
@@ -637,34 +650,45 @@ int main(int argc, char* argv[]) {
 	// initialize_density(points);
 	// isf(points, filename);
 
-
+	// Sphere collision
 	// grid points;
-	// Eigen::Vector3d center(5.0,2.5,2.5);
-	// double radius = 1.0;	
-	// double density = 0.99;
-	// Eigen::Vector3d velocity(-10.0,0.0,0.0);
-	// resize_grid(points);
-	// volume sphere_vol = sphere_volume(center,radius);
-	// initialize_density_volume(points,sphere_vol,density);
-	// initialize_psi_velocity(points,sphere_vol,velocity);
-	// isf(points,sphere_vol,velocity,filename);
-	
+	// Eigen::Vector3d center1(6.3,2.5,2.5);
+	// Eigen::Vector3d center2(3.7,2.5,2.5);
+	// double radius1 = 1.0, radius2 = 1.0;	
+	// Eigen::Vector3d velocity1(-10.0,0.0,0.0);
+	// Eigen::Vector3d velocity2(10.0,0.0,0.0);
 
+	// resize_grid(points);
+	// std::vector<Volume> vols;
+	// std::vector<double> densities;
+	
+	// densities.push_back(0.99);
+	// densities.push_back(0.99);
+	// vols.push_back(sphere_volume(center1,radius1,velocity1));
+	// vols.push_back(sphere_volume(center2,radius2,velocity2));
+	// initialize_density_volume(points,vols,densities);
+
+	// initialize_psi_velocity(points,vols);
+	// isf(points,filename);	
+
+	//Jet and Obstacle
 	grid points;
-	Eigen::Vector3d center1(6.3,2.5,2.5);
-	Eigen::Vector3d center2(3.7,2.5,2.5);
-	double radius1 = 1.0, radius2 = 1.0;	
-	double density = 0.99;
-	Eigen::Vector3d velocity1(-10.0,0.0,0.0);
-	Eigen::Vector3d velocity2(10.0,0.0,0.0);
+	Eigen::Vector3d center1(8.0,2.5,2.5);
+	Eigen::Vector3d center2(5.0,2.5,2.5);
+	double thickness1 = 0.1;
+	double radius1 = 0.6, radius2 = 1.0;	
+	Eigen::Vector3d velocity1(-20.0,0.0,0.0);
+	Eigen::Vector3d velocity2(0.0,0.0,0.0);
 
 	resize_grid(points);
 	std::vector<Volume> vols;
+	std::vector<double> densities;
 
-	vols.push_back(sphere_volume(center1,radius1,velocity1));
+	densities.push_back(0.99);
+	densities.push_back(0.99);
+	vols.push_back(cylinder_volume(center1,radius1,thickness1,velocity1));
 	vols.push_back(sphere_volume(center2,radius2,velocity2));
-	initialize_density_volume(points,vols,density);
-
+	initialize_density_volume(points,vols,densities);
 	initialize_psi_velocity(points,vols);
-	isf(points,filename);	
+	isf(points,vols,densities,filename);	
 }

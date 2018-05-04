@@ -1,3 +1,6 @@
+#ifndef COMP2_H
+#define COMP2_H
+
 #include <complex>
 #include <math.h>
 #include <Eigen/Geometry>
@@ -44,3 +47,5 @@ class Comp2 {
 
 
 };
+
+#endif

@@ -1,0 +1,67 @@
+<?xml version='1.0' encoding='utf-8'?>
+
+<scene version="0.5.0">
+	<integrator type="volpath_simple">
+		<integer name="maxDepth" value="8"/>
+	</integrator>
+
+	<medium type="heterogeneous" id="smoke">
+		<string name="method" value="woodcock"/>
+		<float name="stepSize" value="0.01"/>
+
+		<volume name="density" type="gridvolume">
+			<string name="filename" value="density.vol"/>
+		</volume>
+
+		<volume name="albedo" type="gridvolume">
+			<string  name="filename"  value="color.vol"/>
+		</volume>
+		<!-- <volume name="albedo" type="constvolume">
+			<spectrum name="value" value="0.4,0.4,0.4"/>
+		</volume> -->
+
+		<float name="scale" value="2.5"/>
+	</medium>
+	<shape type="obj">
+		<string name="filename" value="./render/bounds.obj"/>
+		<ref name="interior" id="smoke"/>
+	</shape>
+
+	<sensor type="perspective">
+		<float name="focusDistance" value="2.25668"/>
+		<float name="fov" value="60.8402"/>
+		<string name="fovAxis" value="y"/>
+		<transform name="toWorld">
+
+			<lookat target="5.0,2.5,0.0" origin="5.0, 2.5, 10.0" up="0.0,-1.0,0.0"/>
+		</transform>
+		<sampler type="ldsampler">
+			<integer name="sampleCount" value="256"/>
+		</sampler>
+
+		<film type="hdrfilm">
+			<integer name="height" value="576"/>
+			<integer name="width" value="768"/>
+
+			<rfilter type="gaussian"/>
+		</film>
+	</sensor>
+ 
+	<shape type="sphere">
+		<point name="center" x="6.0" y="2.5" z="10.0"/>
+		<float name="radius" value=".2"/>
+
+		<emitter type="area">
+			<spectrum name="radiance" value="1400"/>
+		</emitter>
+	</shape>
+
+	<shape type="sphere">
+		<point name="center" x="4.0" y="2.5" z="10.0"/>
+		<float name="radius" value=".2"/>
+
+		<emitter type="area">
+			<spectrum name="radiance" value="1400"/>
+		</emitter>
+	</shape>
+</scene>

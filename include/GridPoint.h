@@ -1,3 +1,5 @@
+#ifndef GRIDPOINT_H
+#define GRIDPOINT_H
 #include <complex>
 #include <Comp2.h>
 
@@ -21,6 +23,7 @@ class GridPoint {
 			c.push_back(0.0);
 			c.push_back(0.0);
 			this->color = c;
+			this->normalize();
 		};
 
 		Comp2 get_psi() const;
@@ -50,3 +53,5 @@ class GridPoint {
 		void normalize();	
 
 };
+
+#endif

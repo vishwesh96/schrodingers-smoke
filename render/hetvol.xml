@@ -7,7 +7,7 @@
 
 	<medium type="heterogeneous" id="smoke">
 		<string name="method" value="woodcock"/>
-		<float name="stepSize" value="0.1"/>
+		<float name="stepSize" value="0.01"/>
 
 		<volume name="density" type="gridvolume">
 			<string name="filename" value="density.vol"/>
@@ -16,8 +16,11 @@
 		<volume name="albedo" type="gridvolume">
 			<string  name="filename"  value="color.vol"/>
 		</volume>
+		<!-- <volume name="albedo" type="constvolume">
+			<spectrum name="value" value="0.4,0.4,0.4"/>
+		</volume> -->
 
-		<float name="scale" value="5.0"/>
+		<float name="scale" value="10.0"/>
 	</medium>
 	<shape type="obj">
 		<string name="filename" value="./render/bounds.obj"/>
@@ -33,7 +36,7 @@
 			<lookat target="5.0,2.5,0.0" origin="5.0, 2.5, 10.0" up="0.0,-1.0,0.0"/>
 		</transform>
 		<sampler type="ldsampler">
-			<integer name="sampleCount" value="128"/>
+			<integer name="sampleCount" value="64"/>
 		</sampler>
 
 		<film type="hdrfilm">
